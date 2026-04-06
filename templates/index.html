@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Future - 影视免费片源搜索</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #0c0c1d 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #e94560, #ff6b6b, #ffa07a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #888;
+            font-size: 1em;
+        }
+
+        .search-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 14px 20px;
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            border-radius: 12px;
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .input-row input:focus {
+            border-color: #e94560;
+        }
+
+        .input-row input::placeholder {
+            color: #666;
+        }
+
+        .btn-search {
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #e94560, #c23152);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .btn-search:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-search:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .options {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .options label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: #999;
+            cursor: pointer;
+        }
+
+        .options select {
+            padding: 6px 10px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: #ddd;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .status {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            font-size: 15px;
+            display: none;
+        }
+
+        .status.searching {
+            display: block;
+            background: rgba(233, 69, 96, 0.1);
+            border: 1px solid rgba(233, 69, 96, 0.2);
+            color: #e94560;
+        }
+
+        .status.found {
+            display: block;
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.2);
+            color: #66bb6a;
+        }
+
+        .status.error {
+            display: block;
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid rgba(255, 152, 0, 0.2);
+            color: #ffa726;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(233, 69, 96, 0.3);
+            border-top: 2px solid #e94560;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .results {
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding: 0 4px;
+        }
+
+        .results-header h2 {
+            font-size: 1.2em;
+            color: #e94560;
+        }
+
+        .results-header span {
+            font-size: 13px;
+            color: #888;
+        }
+
+        .result-item {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+            color: inherit;
+        }
+
+        .result-item:hover {
+            background: rgba(233, 69, 96, 0.08);
+            border-color: rgba(233, 69, 96, 0.2);
+            transform: translateX(4px);
+        }
+
+        .result-item .rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #e94560, #c23152);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            margin-right: 12px;
+            vertical-align: middle;
+        }
+
+        .result-item .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #f0f0f0;
+            margin-bottom: 6px;
+        }
+
+        .result-item .desc {
+            font-size: 13px;
+            color: #888;
+            line-height: 1.5;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .result-item .meta {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .result-item .meta .source {
+            color: #e94560;
+        }
+
+        .result-item .meta .score {
+            background: rgba(233, 69, 96, 0.15);
+            color: #e94560;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .result-item .arrow {
+            float: right;
+            color: #555;
+            font-size: 20px;
+            margin-top: -20px;
+        }
+
+        .usage-tips {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 24px;
+        }
+
+        .usage-tips h3 {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+
+        .tip-list {
+            list-style: none;
+        }
+
+        .tip-list li {
+            padding: 8px 0;
+            font-size: 13px;
+            color: #666;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .tip-list li:last-child {
+            border-bottom: none;
+        }
+
+        .tip-list code {
+            background: rgba(233, 69, 96, 0.15);
+            color: #e94560;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 { font-size: 1.8em; }
+            .search-box { padding: 20px; }
+            .input-row { flex-direction: column; }
+            .btn-search { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Future</h1>
+            <p>全网搜索影视免费片源，找到即推送至邮箱</p>
+        </div>
+
+        <div class="search-box">
+            <div class="input-row">
+                <input type="text" id="keyword" placeholder="输入电影或动漫名称..." autofocus>
+                <button class="btn-search" id="searchBtn" onclick="startSearch()">搜索片源</button>
+            </div>
+            <div class="options">
+                <label>
+                    <input type="checkbox" id="persistent"> 持续搜索直到找到
+                </label>
+                <label>
+                    搜索轮数:
+                    <select id="maxRounds">
+                        <option value="1">1 轮（快速）</option>
+                        <option value="3" selected>3 轮（推荐）</option>
+                        <option value="5">5 轮</option>
+                        <option value="10">10 轮</option>
+                        <option value="36">36 轮（持续约72分钟）</option>
+                    </select>
+                </label>
+                <label>
+                    <input type="checkbox" id="sendEmail" checked> 同时发送邮件通知
+                </label>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="results" id="results">
+            <div class="results-header">
+                <h2>搜索结果</h2>
+                <span id="resultCount"></span>
+            </div>
+            <div id="resultsList"></div>
+        </div>
+
+        <div class="usage-tips">
+            <h3>使用方式</h3>
+            <ul class="tip-list">
+                <li>1. <strong>网页搜索</strong>：上方输入片名，点击搜索，结果实时展示</li>
+                <li>2. <strong>邮箱触发</strong>：发送邮件到 <code>3029308562@qq.com</code>，主题写 <code>搜: 片名</code></li>
+                <li>3. <strong>持续搜索</strong>：邮件主题 <code>搜: 片名 持续</code>，自动搜索直到找到片源</li>
+                <li>4. <strong>指定轮数</strong>：邮件主题 <code>搜: 片名 5轮</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let isSearching = false;
+
+        function showStatus(text, type) {
+            const el = document.getElementById('status');
+            el.className = 'status ' + type;
+            if (type === 'searching') {
+                el.innerHTML = '<span class="spinner"></span>' + text;
+            } else {
+                el.innerHTML = text;
+            }
+            el.style.display = 'block';
+        }
+
+        function hideStatus() {
+            document.getElementById('status').style.display = 'none';
+        }
+
+        function renderResults(results, keyword) {
+            const container = document.getElementById('resultsList');
+            const resultsDiv = document.getElementById('results');
+            const countEl = document.getElementById('resultCount');
+
+            if (!results || results.length === 0) {
+                container.innerHTML = '<div style="text-align:center;padding:40px;color:#666;">暂未找到相关结果</div>';
+                resultsDiv.classList.add('active');
+                countEl.textContent = '0 条结果';
+                return;
+            }
+
+            countEl.textContent = results.length + ' 条结果';
+            container.innerHTML = results.map((r, i) => {
+                const link = r.link.startsWith('http') ? r.link : '#';
+                const desc = r.description || '';
+                return `
+                    <a href="${link}" target="_blank" class="result-item" rel="noopener">
+                        <div class="title"><span class="rank">${i + 1}</span>${r.title}</div>
+                        <div class="desc">${desc}</div>
+                        <div class="meta">
+                            <span class="source">${r.source_engine}</span>
+                            <span class="score">${r.score} 分</span>
+                        </div>
+                        <span class="arrow">→</span>
+                    </a>
+                `;
+            }).join('');
+
+            resultsDiv.classList.add('active');
+        }
+
+        async function startSearch() {
+            if (isSearching) return;
+
+            const keyword = document.getElementById('keyword').value.trim();
+            if (!keyword) {
+                showStatus('请输入电影或动漫名称', 'error');
+                return;
+            }
+
+            const persistent = document.getElementById('persistent').checked;
+            const maxRounds = parseInt(document.getElementById('maxRounds').value);
+            const sendEmail = document.getElementById('sendEmail').checked;
+
+            isSearching = true;
+            const btn = document.getElementById('searchBtn');
+            btn.disabled = true;
+            btn.textContent = '搜索中...';
+
+            showStatus('正在搜索「' + keyword + '」，请稍候...', 'searching');
+            document.getElementById('results').classList.remove('active');
+
+            try {
+                const resp = await fetch(API_BASE + '/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        keyword: keyword,
+                        max_rounds: persistent ? 36 : maxRounds,
+                        send_email: sendEmail,
+                    }),
+                });
+
+                if (!resp.ok) {
+                    throw new Error('搜索请求失败: ' + resp.status);
+                }
+
+                const data = await resp.json();
+
+                if (data.found) {
+                    showStatus('✅ 已找到「' + keyword + '」的免费片源！', 'found');
+                } else {
+                    showStatus('⚠️ 本轮未找到精确匹配，已显示最佳结果', 'error');
+                }
+
+                renderResults(data.results, keyword);
+
+            } catch (err) {
+                showStatus('搜索出错: ' + err.message, 'error');
+            } finally {
+                isSearching = false;
+                btn.disabled = false;
+                btn.textContent = '搜索片源';
+            }
+        }
+
+        // 回车键触发搜索
+        document.getElementById('keyword').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') startSearch();
+        });
+    </script>
+</body>
+</html>
