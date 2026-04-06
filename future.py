@@ -26,13 +26,13 @@ import requests
 from bs4 import BeautifulSoup
 
 # ============================================================
-# 配置
+# 配置（优先读取环境变量，未设置则使用默认值）
 # ============================================================
-SENDER_EMAIL = "3029308562@qq.com"
-RECEIVER_EMAIL = "3029308562@qq.com"
-SMTP_SERVER = "smtp.qq.com"
-SMTP_PORT = 465
-SMTP_PASSWORD = "oqudvzgcdeyrdcfd"
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "3029308562@qq.com")
+RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", "3029308562@qq.com")
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.qq.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 
 # 搜索间隔（秒）
 SEARCH_INTERVAL = 120  # 每 2 分钟搜索一次

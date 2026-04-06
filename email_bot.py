@@ -34,8 +34,8 @@ from email.utils import formataddr, parseaddr
 IMAP_SERVER = "imap.qq.com"
 IMAP_PORT = 993
 
-EMAIL_ACCOUNT = "3029308562@qq.com"
-EMAIL_PASSWORD = "oqudvzgcdeyrdcfd"
+EMAIL_ACCOUNT = os.environ.get("EMAIL_ACCOUNT", "3029308562@qq.com")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 
 CHECK_INTERVAL = 60  # 每 60 秒检查一次收件箱
 PROCESSED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".processed_emails.txt")
