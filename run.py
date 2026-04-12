@@ -50,10 +50,7 @@ HEADERS = {
 }
 
 SEARCH_ENGINES = [
-    # ===== 国内引擎（中文搜索词） =====
-    {"name": "Bing中文", "search_url": "https://cn.bing.com/search?q={query}&cc=cn&setlang=zh-Hans&count=30",
-     "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
-     "desc_selector": "p, div.b_caption p", "queries": ["zh"]},
+    # ===== 国内引擎（中文搜索词）- 主要依赖 =====
     {"name": "360搜索", "search_url": "https://www.so.com/s?q={query}",
      "result_selector": "li.res-list", "title_selector": "h3 a", "link_selector": "h3 a[href]",
      "desc_selector": "div.res-desc", "queries": ["zh"]},
@@ -63,13 +60,13 @@ SEARCH_ENGINES = [
     {"name": "百度", "search_url": "https://www.baidu.com/s?wd={query}&rn=30",
      "result_selector": "div.result, div.c-container", "title_selector": "h3 a, a.c-font-large",
      "link_selector": "h3 a[href], a[href]", "desc_selector": "div.c-abstract, span.content-right_8Zs40", "queries": ["zh"]},
-    # ===== 国际引擎（英文搜索词） =====
-    {"name": "Bing", "search_url": "https://www.bing.com/search?q={query}&count=30",
+    # ===== Bing（中英文都支持）- 补充 =====
+    {"name": "Bing中文", "search_url": "https://cn.bing.com/search?q={query}&cc=cn&setlang=zh-Hans&count=30",
+     "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
+     "desc_selector": "p, div.b_caption p", "queries": ["zh"]},
+    {"name": "Bing国际", "search_url": "https://www.bing.com/search?q={query}&count=30",
      "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
      "desc_selector": "p, div.b_caption p", "queries": ["en"]},
-    {"name": "Google", "search_url": "https://www.google.com/search?q={query}&num=30",
-     "result_selector": "div.g", "title_selector": "h3", "link_selector": "a[href]",
-     "desc_selector": "div[data-sncf], span.aCOpRe, div.VwiC3b", "queries": ["en"]},
 ]
 
 FREE_KEYWORDS = ["免费观看", "免费在线", "免费看", "在线观看", "在线看", "高清在线", "完整版", "全集",
