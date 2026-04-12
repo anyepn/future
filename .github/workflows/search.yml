@@ -1,17 +1,12 @@
 name: Future 影视搜索
 
 on:
+  # 每 10 分钟自动检查邮箱
+  schedule:
+    - cron: '*/10 * * * *'
+
+  # 手动触发（备用）
   workflow_dispatch:
-    inputs:
-      keyword:
-        description: '电影/动漫名称'
-        required: true
-        type: string
-      max_rounds:
-        description: '最大搜索轮数'
-        required: false
-        type: string
-        default: '5'
 
 jobs:
   search:
@@ -25,22 +20,29 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 缓存已处理邮件列表
+        uses: actions/cache@v4
+        with:
+          path: processed.json
+          key: future-processed-emails
+
       - name: 安装依赖
         run: pip install requests beautifulsoup4
 
-      - name: 执行搜索
+      - name: 检查邮箱并执行搜索
         env:
+          EMAIL_ACCOUNT: '3029308562@qq.com'
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: '3029308562@qq.com'
           RECEIVER_EMAIL: '3029308562@qq.com'
           SMTP_SERVER: 'smtp.qq.com'
           SMTP_PORT: '465'
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-        run: |
-          echo "=========================================="
-          echo "🎬 开始搜索: ${{ github.event.inputs.keyword }}"
-          echo "🔍 轮数: ${{ github.event.inputs.max_rounds }}"
-          echo "=========================================="
-          python future.py "${{ github.event.inputs.keyword }}" --max-retries ${{ github.event.inputs.max_rounds }} || true
-          echo "=========================================="
-          echo "✅ 搜索完成"
-          echo "=========================================="
+        run: python run.py
+
+      - name: 上传已处理邮件列表
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-emails
+          path: processed.json
+          retention-days: 1
