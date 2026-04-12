@@ -50,15 +50,26 @@ HEADERS = {
 }
 
 SEARCH_ENGINES = [
-    {"name": "Google", "search_url": "https://www.google.com/search?q={query}&hl=zh-CN&num=30",
-     "result_selector": "div.g", "title_selector": "h3", "link_selector": "a[href]",
-     "desc_selector": "div[data-sncf], span.aCOpRe, div.VwiC3b"},
-    {"name": "Bing", "search_url": "https://www.bing.com/search?q={query}&cc=cn&setlang=zh-Hans&count=30",
+    # ===== 国内引擎（中文搜索词） =====
+    {"name": "Bing中文", "search_url": "https://cn.bing.com/search?q={query}&cc=cn&setlang=zh-Hans&count=30",
      "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
-     "desc_selector": "p, div.b_caption p"},
+     "desc_selector": "p, div.b_caption p", "queries": ["zh"]},
+    {"name": "360搜索", "search_url": "https://www.so.com/s?q={query}",
+     "result_selector": "li.res-list", "title_selector": "h3 a", "link_selector": "h3 a[href]",
+     "desc_selector": "div.res-desc", "queries": ["zh"]},
+    {"name": "搜狗", "search_url": "https://www.sogou.com/web?query={query}",
+     "result_selector": "div.vrwrap, div.rb", "title_selector": "h3 a", "link_selector": "h3 a[href], a.title[href]",
+     "desc_selector": "div.str_info, p.str_time_info", "queries": ["zh"]},
     {"name": "百度", "search_url": "https://www.baidu.com/s?wd={query}&rn=30",
      "result_selector": "div.result, div.c-container", "title_selector": "h3 a, a.c-font-large",
-     "link_selector": "h3 a[href], a[href]", "desc_selector": "div.c-abstract, span.content-right_8Zs40"},
+     "link_selector": "h3 a[href], a[href]", "desc_selector": "div.c-abstract, span.content-right_8Zs40", "queries": ["zh"]},
+    # ===== 国际引擎（英文搜索词） =====
+    {"name": "Bing", "search_url": "https://www.bing.com/search?q={query}&count=30",
+     "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
+     "desc_selector": "p, div.b_caption p", "queries": ["en"]},
+    {"name": "Google", "search_url": "https://www.google.com/search?q={query}&num=30",
+     "result_selector": "div.g", "title_selector": "h3", "link_selector": "a[href]",
+     "desc_selector": "div[data-sncf], span.aCOpRe, div.VwiC3b", "queries": ["en"]},
 ]
 
 FREE_KEYWORDS = ["免费观看", "免费在线", "免费看", "在线观看", "在线看", "高清在线", "完整版", "全集",
@@ -208,17 +219,22 @@ def verify_page(url):
 
 
 def search_movie(keyword, max_rounds):
-    search_query = f"{keyword} 免费在线观看"
+    queries = {
+        "zh": [f"{keyword} 免费在线观看", f"{keyword} 免费观看", f"{keyword} 在线看"],
+        "en": [f"{keyword} free watch online", f"{keyword} free streaming", f"{keyword} watch online free"],
+    }
     seen, all_found = set(), []
 
     for rn in range(1, max_rounds + 1):
         logger.info(f"--- 第 {rn}/{max_rounds} 轮 ---")
         results = []
         for engine in SEARCH_ENGINES:
-            r = search_engine(search_query, engine)
-            logger.info(f"{engine['name']}: {len(r)} 条")
-            results.extend(r)
-            time.sleep(1)
+            qlist = queries.get(engine.get("queries", ["zh"])[0], queries["zh"])
+            for q in qlist[:2]:  # 每个引擎最多搜 2 种词
+                r = search_engine(q, engine)
+                logger.info(f"{engine['name']} [{q[:15]}...]: {len(r)} 条")
+                results.extend(r)
+                time.sleep(1)
 
         for r in results:
             if r["title"] not in seen and is_relevant(r, keyword):
