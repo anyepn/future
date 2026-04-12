@@ -2,16 +2,6 @@ name: Future 影视搜索
 
 on:
   workflow_dispatch:
-    inputs:
-      keyword:
-        description: '电影/动漫名称'
-        required: true
-        type: string
-      max_rounds:
-        description: '搜索轮数（默认 5）'
-        required: false
-        type: string
-        default: '5'
 
 jobs:
   search:
@@ -25,14 +15,31 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 恢复已处理邮件列表
+        uses: actions/cache@v4
+        with:
+          path: future_processed.json
+          key: future-processed-v1
+
       - name: 安装依赖
         run: pip install requests beautifulsoup4
 
-      - name: 执行搜索并发送结果
+      - name: 检查邮箱并搜索
         env:
+          EMAIL_ACCOUNT: '3029308562@qq.com'
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           SENDER_EMAIL: '3029308562@qq.com'
           RECEIVER_EMAIL: '3029308562@qq.com'
           SMTP_SERVER: 'smtp.qq.com'
           SMTP_PORT: '465'
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          MAX_ROUNDS: '5'
+          PROCESSED_FILE: 'future_processed.json'
         run: python run.py
+
+      - name: 保存已处理邮件列表
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-cache
+          path: future_processed.json
+          retention-days: 1

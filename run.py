@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Future - 影视搜索脚本
-接收环境变量 KEYWORD 和 MAX_ROUNDS，执行搜索并发送结果邮件。
+Future - 一站式自动化脚本
+启动后自动执行：检查邮箱 → 提取片名 → 搜索 → 发送结果
 """
 
 import os
 import sys
+import re
+import imaplib
+import email
 import time
+import json
+import logging
 import smtplib
 import ssl
-import logging
+from email.header import decode_header
+from email.utils import formataddr, parseaddr, formatdate
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formatdate
 from urllib.parse import quote
 
 import requests
@@ -23,15 +28,19 @@ from bs4 import BeautifulSoup
 # ============================================================
 # 配置
 # ============================================================
-KEYWORD = os.environ.get("KEYWORD", "")
-MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "5"))
-INTERVAL = int(os.environ.get("INTERVAL", "60"))
+IMAP_SERVER = os.environ.get("IMAP_SERVER", "imap.qq.com")
+IMAP_PORT = int(os.environ.get("IMAP_PORT", "993"))
+EMAIL_ACCOUNT = os.environ.get("EMAIL_ACCOUNT", "3029308562@qq.com")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "3029308562@qq.com")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", "3029308562@qq.com")
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.qq.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
+MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "5"))
+INTERVAL = int(os.environ.get("INTERVAL", "60"))
+
+PROCESSED_FILE = os.environ.get("PROCESSED_FILE", "/tmp/future_processed.json")
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -62,7 +71,74 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 搜索引擎
+# 邮件解析
+# ============================================================
+def decode_str(s):
+    if not s:
+        return ""
+    parts = decode_header(s)
+    return "".join(
+        p.decode(c or "utf-8", errors="replace") if isinstance(p, bytes) else p
+        for p, c in parts
+    )
+
+
+def parse_command(subject):
+    m = re.match(r"^(?:搜|搜索)\s*[:：]\s*(.+?)(?:\s+(\d+)[轮圈])?\s*(持续)?$", subject.strip())
+    if not m:
+        return None, 5
+    kw = m.group(1).strip()
+    if len(kw) < 1:
+        return None, 5
+    rounds = int(m.group(2)) if m.group(2) else (36 if m.group(3) else 5)
+    return kw, rounds
+
+
+# ============================================================
+# 检查邮箱
+# ============================================================
+def check_emails():
+    processed = set()
+    if os.path.exists(PROCESSED_FILE):
+        try:
+            processed = set(json.load(open(PROCESSED_FILE)))
+        except Exception:
+            pass
+
+    commands = []
+    try:
+        mail = imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT)
+        mail.login(EMAIL_ACCOUNT, EMAIL_PASSWORD)
+        mail.select("INBOX")
+        _, msgs = mail.search(None, "UNSEEN")
+
+        for eid in msgs[0].split():
+            eid_str = eid.decode()
+            if eid_str in processed:
+                continue
+            try:
+                _, data = mail.fetch(eid, "(RFC822)")
+                msg = email.message_from_bytes(data[0][1])
+                subject = decode_str(msg.get("Subject", ""))
+                keyword, rounds = parse_command(subject)
+                if keyword:
+                    logger.info(f"发现搜索命令: [{keyword}] {rounds}轮")
+                    commands.append((keyword, rounds))
+                mail.store(eid, "+FLAGS", "\\Seen")
+                processed.add(eid_str)
+            except Exception:
+                pass
+
+        mail.logout()
+    except Exception as e:
+        logger.error(f"邮箱连接失败: {e}")
+
+    json.dump(list(processed), open(PROCESSED_FILE, "w"))
+    return commands
+
+
+# ============================================================
+# 搜索
 # ============================================================
 def search_engine(query, engine):
     url = engine["search_url"].format(query=quote(query))
@@ -131,15 +207,12 @@ def verify_page(url):
         return False
 
 
-# ============================================================
-# 搜索主流程
-# ============================================================
-def search_movie(keyword, max_rounds=5):
+def search_movie(keyword, max_rounds):
     search_query = f"{keyword} 免费在线观看"
-    seen, all_relevant = set(), []
+    seen, all_found = set(), []
 
-    for round_num in range(1, max_rounds + 1):
-        logger.info(f"--- 第 {round_num}/{max_rounds} 轮 ---")
+    for rn in range(1, max_rounds + 1):
+        logger.info(f"--- 第 {rn}/{max_rounds} 轮 ---")
         results = []
         for engine in SEARCH_ENGINES:
             r = search_engine(search_query, engine)
@@ -151,31 +224,28 @@ def search_movie(keyword, max_rounds=5):
             if r["title"] not in seen and is_relevant(r, keyword):
                 r["score"] = score_result(r)
                 seen.add(r["title"])
-                all_relevant.append(r)
+                all_found.append(r)
 
-        all_relevant.sort(key=lambda x: -x["score"])
-        top = all_relevant[:15]
+        all_found.sort(key=lambda x: -x["score"])
+        top = all_found[:15]
         logger.info(f"相关: {len(top)} 条, 最高: {top[0]['score'] if top else 0}分")
 
         for r in top:
             if r["score"] >= 30:
-                if r["score"] >= 40:
-                    ok = verify_page(r["link"])
-                else:
-                    ok = True
+                ok = verify_page(r["link"]) if r["score"] >= 40 else True
                 if ok:
                     logger.info(f"✅ 找到: {r['title']} ({r['score']}分)")
                     return top, True
 
-        if round_num < max_rounds:
+        if rn < max_rounds:
             logger.info(f"未找到，等 {INTERVAL}s...")
             time.sleep(INTERVAL)
 
-    return all_relevant[:15], False
+    return all_found[:15], False
 
 
 # ============================================================
-# 邮件发送
+# 发送邮件
 # ============================================================
 def send_email(results, keyword, found):
     msg = MIMEMultipart()
@@ -190,12 +260,12 @@ def send_email(results, keyword, found):
         desc = r["description"][:150] + "..." if len(r.get("description", "")) > 150 else r.get("description", "")
         rows += f'<tr><td style="padding:10px 8px;border-bottom:1px solid #eee;text-align:center;color:#888;font-size:13px;">{i}</td><td style="padding:10px 8px;border-bottom:1px solid #eee;"><a href="{link}" style="color:#1a73e8;text-decoration:none;font-weight:500;">{r["title"]}</a><p style="margin:4px 0 0;font-size:12px;color:#666;">{desc}</p><span style="font-size:11px;color:#aaa;">{r["source_engine"]} | {r["score"]}分</span></td></tr>'
 
-    status = "🎯 找到免费片源！" if found else "📋 搜索结果（未找到精确匹配）"
     style = "background:#e8f5e9;color:#2e7d32;" if found else "background:#fff3e0;color:#e65100;"
+    status = "🎯 找到免费片源！" if found else "📋 搜索结果（未找到精确匹配）"
 
     html = f"""<div style="font-family:'Microsoft YaHei',sans-serif;max-width:700px;margin:0 auto;background:#f9fafb;padding:20px;">
 <div style="background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-<h1 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">🎬 Future - 影视片源搜索</h1>
+<h1 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">🎬 Future</h1>
 <p style="margin:0 0 16px;font-size:14px;color:#666;">{status}</p>
 <div style="background:#f0f4ff;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
 <span style="font-size:14px;">🔍 {keyword}</span><br>
@@ -203,8 +273,8 @@ def send_email(results, keyword, found):
 <table style="width:100%;border-collapse:collapse;">
 <thead><tr style="background:#1a1a2e;color:#fff;"><th style="padding:10px;width:40px;text-align:center;">#</th><th style="padding:10px;text-align:left;">搜索结果</th></tr></thead>
 <tbody>{rows or '<tr><td colspan="2" style="padding:20px;text-align:center;color:#999;">暂无结果</td></tr>'}</tbody></table>
-<p style="margin-top:16px;padding:12px;{style}border-radius:8px;font-size:13px;">{'✅ 上方链接可直接点击观看。' if found else '建议增加搜索轮数。'}</p>
-<hr style="border:none;border-top:1px solid #eee;margin:16px 0;"><p style="color:#bbb;font-size:11px;">Future · GitHub Actions</p></div></div>"""
+<p style="margin-top:16px;padding:12px;{style}border-radius:8px;font-size:13px;">{'✅ 上方可直接点击观看。' if found else '建议增加搜索轮数。'}</p>
+</div></div>"""
 
     msg.attach(MIMEText(html, "html", "utf-8"))
 
@@ -226,17 +296,22 @@ def send_email(results, keyword, found):
 # 主入口
 # ============================================================
 def main():
-    if not KEYWORD:
-        logger.error("未设置 KEYWORD 环境变量")
-        sys.exit(1)
-    if not EMAIL_PASSWORD:
-        logger.error("未设置 EMAIL_PASSWORD 环境变量")
-        sys.exit(1)
+    logger.info("=" * 50)
+    logger.info("🎬 Future 启动")
 
-    logger.info(f"▶ 搜索: [{KEYWORD}] ({MAX_ROUNDS}轮)")
-    results, found = search_movie(KEYWORD, MAX_ROUNDS)
-    send_email(results, KEYWORD, found)
-    logger.info(f"✅ 完成 - {'找到' if found else '未找到'}")
+    # 1. 检查邮箱
+    logger.info("检查邮箱...")
+    commands = check_emails()
+    if not commands:
+        logger.info("没有新的搜索命令，退出")
+        return
+
+    # 2. 执行搜索 + 发送结果
+    for keyword, rounds in commands:
+        logger.info(f"▶ 搜索: [{keyword}] ({rounds}轮)")
+        results, found = search_movie(keyword, rounds)
+        send_email(results, keyword, found)
+        logger.info(f"✅ 完成 - {'找到' if found else '未找到'}")
 
 
 if __name__ == "__main__":
