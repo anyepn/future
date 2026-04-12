@@ -34,8 +34,8 @@ from email.utils import formataddr, parseaddr
 IMAP_SERVER = "imap.qq.com"
 IMAP_PORT = 993
 
-EMAIL_ACCOUNT = os.environ.get("EMAIL_ACCOUNT", "3029308562@qq.com")
-EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
+EMAIL_ACCOUNT = "3029308562@qq.com"
+EMAIL_PASSWORD = "oqudvzgcdeyrdcfd"
 
 CHECK_INTERVAL = 60  # 每 60 秒检查一次收件箱
 PROCESSED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".processed_emails.txt")
@@ -269,6 +269,14 @@ def main():
             # 检查新邮件
             commands = check_new_emails(mail)
 
+            # 每 30 秒发一次 NOOP 保持连接活跃
+            try:
+                mail.noop()
+            except Exception:
+                logger.warning("IMAP 连接已失效，准备重连...")
+                mail = None
+                continue
+
             if commands:
                 logger.info(f"📋 收到 {len(commands)} 个搜索命令")
                 # 在线程中执行搜索，避免阻塞邮件监控
@@ -279,12 +287,22 @@ def main():
 
             time.sleep(CHECK_INTERVAL)
 
-        except imaplib.IMAP4.abort:
+        except (imaplib.IMAP4.abort, imaplib.IMAP4.read_only, ConnectionError, OSError):
             logger.warning("IMAP 连接中断，重连中...")
+            try:
+                if mail:
+                    mail.logout()
+            except Exception:
+                pass
             mail = None
             time.sleep(10)
         except Exception as e:
             logger.error(f"主循环异常: {e}")
+            try:
+                if mail:
+                    mail.logout()
+            except Exception:
+                pass
             mail = None
             time.sleep(CHECK_INTERVAL)
 

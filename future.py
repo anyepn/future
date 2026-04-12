@@ -32,7 +32,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "3029308562@qq.com")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", "3029308562@qq.com")
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.qq.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_PASSWORD = "oqudvzgcdeyrdcfd"
 
 # 搜索间隔（秒）
 SEARCH_INTERVAL = 120  # 每 2 分钟搜索一次
@@ -234,6 +234,10 @@ def verify_page(url):
 # ============================================================
 def send_email(subject, html_body, is_final=True):
     """发送邮件通知"""
+    if not SMTP_PASSWORD:
+        logger.warning("未配置 SMTP_PASSWORD，跳过邮件发送")
+        return False
+
     msg = MIMEMultipart()
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
@@ -242,15 +246,20 @@ def send_email(subject, html_body, is_final=True):
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     context = ssl.create_default_context()
-    try:
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
-            server.login(SENDER_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
-        logger.info(f"邮件已发送至 {RECEIVER_EMAIL}")
-        return True
-    except Exception as e:
-        logger.error(f"邮件发送失败: {e}")
-        return False
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=30) as server:
+                server.login(SENDER_EMAIL, SMTP_PASSWORD)
+                server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
+            logger.info(f"邮件已发送至 {RECEIVER_EMAIL}")
+            return True
+        except Exception as e:
+            logger.warning(f"邮件发送第 {attempt}/{max_retries} 次失败: {e}")
+            if attempt < max_retries:
+                time.sleep(5 * attempt)
+    logger.error(f"邮件发送最终失败，已重试 {max_retries} 次")
+    return False
 
 
 # ============================================================
@@ -378,27 +387,23 @@ def search_movie(keyword, max_retries=MAX_RETRIES, interval=SEARCH_INTERVAL):
             logger.info(f"找到匹配度较高的结果，标记为已找到")
             found = True
 
-        # 发送邮件通知
-        subject_prefix = "🎯 找到片源" if found else f"⏳ 搜索中 ({round_num}/{max_retries})"
-        subject = f"{subject_prefix} - {keyword}"
-        html = format_results_email(keyword, top_results, round_num, max_retries, found)
-        send_email(subject, html, is_final=found)
-
+        # 找到片源才发邮件，搜索中不发
         if found:
+            subject = f"🎯 找到片源 - {keyword}"
+            html = format_results_email(keyword, top_results, round_num, max_retries, True)
+            send_email(subject, html)
             logger.info(f"🎉 成功找到免费片源，任务结束！")
             return True
 
-        # 未找到，等待后继续
+        # 未找到，等待后继续（不发邮件）
+        logger.info(f"本轮未找到，继续搜索...")
         if round_num < max_retries:
-            logger.info(f"本轮未找到，等待 {interval}s 后继续搜索...")
             time.sleep(interval)
 
-    # 超过最大轮数
+    # 超过最大轮数，发送最终报告
     logger.warning(f"⚠️ 达到最大搜索轮数 {max_retries}，未找到免费片源")
-
-    # 发送最终报告
     final_html = format_results_email(keyword, relevant[:15], max_retries, max_retries, False)
-    send_email(f"📋 搜索报告（已达上限）- {keyword}", final_html, is_final=True)
+    send_email(f"📋 搜索报告 - {keyword}", final_html)
     return False
 
 
