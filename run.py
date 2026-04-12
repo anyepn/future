@@ -37,8 +37,8 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "3029308562@qq.com")
 RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", "3029308562@qq.com")
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.qq.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
-MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "5"))
-INTERVAL = int(os.environ.get("INTERVAL", "60"))
+MAX_ROUNDS = int(os.environ.get("MAX_ROUNDS", "3"))
+INTERVAL = int(os.environ.get("INTERVAL", "30"))
 
 PROCESSED_FILE = os.environ.get("PROCESSED_FILE", "/tmp/future_processed.json")
 
@@ -219,9 +219,10 @@ def verify_page(url):
 
 
 def search_movie(keyword, max_rounds):
+    # 精简搜索词，每个引擎只搜 1 次
     queries = {
-        "zh": [f"{keyword} 免费在线观看", f"{keyword} 免费观看", f"{keyword} 在线看"],
-        "en": [f"{keyword} free watch online", f"{keyword} free streaming", f"{keyword} watch online free"],
+        "zh": f"{keyword} 免费在线观看",
+        "en": f"{keyword} free watch online",
     }
     seen, all_found = set(), []
 
@@ -229,12 +230,12 @@ def search_movie(keyword, max_rounds):
         logger.info(f"--- 第 {rn}/{max_rounds} 轮 ---")
         results = []
         for engine in SEARCH_ENGINES:
-            qlist = queries.get(engine.get("queries", ["zh"])[0], queries["zh"])
-            for q in qlist[:2]:  # 每个引擎最多搜 2 种词
-                r = search_engine(q, engine)
-                logger.info(f"{engine['name']} [{q[:15]}...]: {len(r)} 条")
-                results.extend(r)
-                time.sleep(1)
+            qtype = engine.get("queries", ["zh"])[0]
+            q = queries.get(qtype, queries["zh"])
+            r = search_engine(q, engine)
+            logger.info(f"{engine['name']}: {len(r)} 条")
+            results.extend(r)
+            time.sleep(0.5)  # 缩短等待时间
 
         for r in results:
             if r["title"] not in seen and is_relevant(r, keyword):
