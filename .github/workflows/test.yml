@@ -1,0 +1,22 @@
+name: 搜索引擎测试
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install requests beautifulsoup4
+
+      - name: 测试所有搜索引擎
+        run: python test_engines.py
