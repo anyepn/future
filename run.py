@@ -49,6 +49,9 @@ HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }
 
+# Serper API (Google 搜索替代)
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
+
 SEARCH_ENGINES = [
     # ===== 国内引擎（中文搜索词）- 主要依赖 =====
     {"name": "360搜索", "search_url": "https://www.so.com/s?q={query}",
@@ -60,14 +63,14 @@ SEARCH_ENGINES = [
     {"name": "百度", "search_url": "https://www.baidu.com/s?wd={query}&rn=30",
      "result_selector": "div.result, div.c-container", "title_selector": "h3 a, a.c-font-large",
      "link_selector": "h3 a[href], a[href]", "desc_selector": "div.c-abstract, span.content-right_8Zs40", "queries": ["zh"]},
-    # ===== Bing（中英文都支持）- 补充 =====
-    {"name": "Bing中文", "search_url": "https://cn.bing.com/search?q={query}&cc=cn&setlang=zh-Hans&count=30",
-     "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
-     "desc_selector": "p, div.b_caption p", "queries": ["zh"]},
-    {"name": "Bing国际", "search_url": "https://www.bing.com/search?q={query}&count=30",
-     "result_selector": "li.b_algo", "title_selector": "h2 a", "link_selector": "h2 a[href]",
-     "desc_selector": "p, div.b_caption p", "queries": ["en"]},
 ]
+
+# Serper API 搜索（英文词）
+SERPER_QUERIES = [
+    "{keyword} free watch online",
+    "{keyword} free streaming",
+]
+
 
 FREE_KEYWORDS = ["免费观看", "免费在线", "免费看", "在线观看", "在线看", "高清在线", "完整版", "全集",
                   "无广告", "免费播放", "在线播放", "高清播放", "无删减", "free online", "streaming"]
@@ -174,6 +177,36 @@ def search_engine(query, engine):
     return results
 
 
+def search_serper(keyword):
+    """通过 Serper API 搜索 Google 结果"""
+    if not SERPER_API_KEY:
+        return []
+    results = []
+    for q_tpl in SERPER_QUERIES:
+        q = q_tpl.format(keyword=keyword)
+        try:
+            resp = requests.post(
+                "https://google.serper.dev/search",
+                headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+                json={"q": q, "num": 10, "hl": "en"},
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                logger.warning(f"Serper API 失败: HTTP {resp.status_code}")
+                continue
+            data = resp.json()
+            for item in data.get("organic", []):
+                title = item.get("title", "")
+                link = item.get("link", "")
+                desc = item.get("snippet", "")
+                if title and link:
+                    results.append({"title": title, "link": link, "description": desc[:300], "source_engine": "Google(Serper)"})
+            logger.info(f"Serper/API [{q[:15]}...]: {len(data.get('organic', []))} 条")
+        except Exception as e:
+            logger.warning(f"Serper API 失败: {e}")
+    return results
+
+
 def extract_domain(url):
     try:
         from urllib.parse import urlparse
@@ -232,7 +265,11 @@ def search_movie(keyword, max_rounds):
             r = search_engine(q, engine)
             logger.info(f"{engine['name']}: {len(r)} 条")
             results.extend(r)
-            time.sleep(0.5)  # 缩短等待时间
+            time.sleep(0.5)
+
+        # Serper API (Google 搜索替代)
+        serper_results = search_serper(keyword)
+        results.extend(serper_results)  # 缩短等待时间
 
         for r in results:
             if r["title"] not in seen and is_relevant(r, keyword):

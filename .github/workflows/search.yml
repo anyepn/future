@@ -32,8 +32,9 @@ jobs:
           RECEIVER_EMAIL: '3029308562@qq.com'
           SMTP_SERVER: 'smtp.qq.com'
           SMTP_PORT: '465'
-          MAX_ROUNDS: '5'
+          MAX_ROUNDS: '3'
           PROCESSED_FILE: 'future_processed.json'
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
         run: python run.py
 
       - name: 保存已处理邮件列表
